@@ -1,0 +1,6 @@
+﻿indicator_id,level,output_id,name,definition,formula,unit,baseline,baseline_year,target,target_year,mov,data_source,frequency,pdm_version,target_basis,collector,origin,remark
+IND-OC-1,Outcome,,[예시] 부카스센터 월평균 이용자 수,대상 센터의 월평균 외래 이용 건수,Σ센터별 월 이용건수 / 센터 수,건,,,,2032,센터 월별 실적보고,부카스 데이터 통계관리시스템 집계,월,v1.0,,,,
+IND-OC-2,Outcome,,[예시] 이용자 만족도,이용자 만족도 조사 평균점수,5점 척도 평균,점,,,4.0,2032,기초선·중간선·종료선 조사,현지 평가기관 조사,조사시점,v1.0,,,,
+IND-O1-1,Output,O1,[예시] 기초선조사 완료 센터 수,,,개소,0.0,2026.0,27.0,2027,기초선조사 보고서,PMC,1회,v1.0,,,,
+IND-O3-1,Output,O3,[예시] 교육 수료 인원,,누적 수료자 수,명,0.0,2026.0,,2032,수료자 명부,현지 교육기관,반기,v1.0,,,,
+IND-O3-2,Output,O3,[예시] 교육 만족도,,5점 척도 평균,점,,,4.0,2032,교육 만족도 설문,PMC,교육 회차별,v1.0,,,,

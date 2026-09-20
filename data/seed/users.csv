@@ -1,0 +1,7 @@
+﻿user_id,name,org,role,email,active
+u01,이호철,연세대학교,ADMIN,,1
+u02,(PM 성명),(주관기관),PM,,1
+u03,(상주 PL 성명),(주관기관),PL,,1
+u04,(PAO 성명),(주관기관),PAO,,1
+u05,(분야 전문가),(컨소시엄),EXPERT,,1
+u06,(KOICA 담당자),KOICA 필리핀사무소,KOICA_VIEWER,,1

@@ -1,0 +1,12 @@
+anthropic
+streamlit>=1.50
+pandas
+pyyaml
+python-dotenv
+pypdf
+python-docx
+reportlab
+openpyxl
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client

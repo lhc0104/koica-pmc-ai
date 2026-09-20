@@ -1,0 +1,25 @@
+project:
+  name: "BUCAS PMC AI 사업비서"
+  period: "2026-2032"
+  db_path: "data/pmc.db"
+  docs_dir: "data/documents"
+
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-5"      # 사용 시점의 최신 모델명으로 교체 (docs.claude.com 모델 목록 확인)
+  max_tokens: 2000
+  max_tool_rounds: 6            # 한 질문당 도구 호출 반복 상한
+
+alerts:
+  notice_days: [30, 14, 7]      # D-30 / D-14 / D-7
+  anomaly_drop_pct: 20          # 전월 대비 감소율(%) 이상이면 이상치로 표시
+
+search:
+  top_k: 5
+  chunk_chars: 800
+
+weekly:                          # [4. 사업관리] 회의록·주간업무보고 화면
+  years: [2026, 2031]            # 연도 탭 범위 (자료가 있는 다른 연도는 자동으로 추가됨)
+  start: "2026-08-31"            # 주간업무보고 첫 주의 월요일 (2026년 9월 1주차 = 8월31일(월)~9월4일(금))
+  columns: ["PM", "PAO", "현지직원1", "현지직원2", "현지직원3", "국내활동"]   # 주간업무보고 칸(열) — 이름을 바꾸면 화면에 반영
+

@@ -1,0 +1,9 @@
+﻿stakeholder_id,org,dept,person_name,position,contact,category,valid_from,valid_to
+SH-01,KOICA,필리핀사무소,,,,KOICA,2026-01-01,
+SH-02,DOH,UHC-HSC TO,,,,DOH,2026-01-01,
+SH-03,DOH,KMITS,,,,DOH,2026-01-01,
+SH-04,DOH,HFDB,,,,DOH,2026-01-01,
+SH-05,CHD,(관할 CHD),,,,CHD,2026-01-01,
+SH-06,ADB,,,,,공여기관,2026-01-01,
+SH-07,UNFPA,,,,,공여기관,2026-01-01,
+SH-08,World Bank,,,,,공여기관,2026-01-01,

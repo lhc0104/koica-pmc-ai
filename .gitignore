@@ -1,0 +1,5 @@
+.env
+data/pmc.db
+__pycache__/
+data/issue_reports.db
+data/.sync_state.json
