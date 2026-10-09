@@ -324,7 +324,7 @@ def view_only() -> bool:
 
 
 EDIT_WORDS = re.compile(r"저장|추가|삭제|지우기|지우기|수정|바꾸기|만들기|반영|올리기|업로드|생성|계산|등록|연결|끊기|가져오기|보내기|입력|옮기기|답변|재설정|적용")
-ALLOW_LABELS = {"메모 저장", "비밀번호 변경", "로그인", "로그아웃"}
+ALLOW_LABELS = {"메모 저장", "비밀번호 변경", "로그인", "로그아웃", "로그인 화면으로", "비로그인 접속 (열람용)"}
 VIEW_HELP = "열람 권한만 있습니다. 수정하려면 관리자에게 문의하세요."
 
 
@@ -366,7 +366,7 @@ def login_screen():
         st.markdown("<div style='height:3.5rem'></div>", unsafe_allow_html=True)
         st.markdown(f'<div class="brand" style="justify-content:center">{BRAND_MARK}<div><div class="wm">AI<b>-</b>KME</div><div class="tag">{esc(APP_FULL)}</div></div></div>', unsafe_allow_html=True)
         with st.container(border=True):
-            st.markdown('<div class="card-title">로그인</div><div class="card-meta">KOICA 필리핀 루존 부카스센터 PMC 사업 — 사업·성과관리</div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-title">로그인</div>', unsafe_allow_html=True)
             with st.form("login", border=False):
                 uid = st.text_input("ID", key="login_id", autocomplete="username")
                 pw = st.text_input("비밀번호", type="password", key="login_pw", autocomplete="current-password")
@@ -377,7 +377,10 @@ def login_screen():
                     st.session_state["auth"] = user
                     st.rerun()
                 st.error("ID 또는 비밀번호가 맞지 않습니다.")
-            st.caption("계정이 없으면 관리자(이호철 교수)에게 ID와 비밀번호를 요청하세요. 일반 계정은 열람만, 관리자 계정은 수정까지 할 수 있습니다.")
+            if st.button("비로그인 접속 (열람용)", key="login_guest", width="stretch", help="계정 없이 들어갑니다. 보기와 내려받기만 되고 저장·수정은 할 수 없습니다."):
+                st.session_state["auth"] = auth.guest()
+                st.rerun()
+            st.caption("로그인에 대한 문의가 필요하다면, 관리자에게 문의하세요 (LHC0104@YONSEI.AC.KR)")
     st.markdown(f'<div class="footer">{COPYRIGHT}</div>', unsafe_allow_html=True)
 
 
@@ -2106,16 +2109,19 @@ with st.sidebar:
         st.session_state.page = ACCOUNTS
         st.rerun()
     _u = current_user()
-    with st.popover(f"{_u.get('login_id', '')} · {_u.get('role', '')}", width="stretch"):
+    with st.popover("비로그인 · 열람용" if _u.get("guest") else f"{_u.get('login_id', '')} · {_u.get('role', '')}", width="stretch"):
         st.markdown(f'<div class="mt-c"><b>{esc(_u.get("name") or _u.get("login_id"))}</b><br><span class="card-meta">{esc(_u.get("role"))} 권한'
                     f'{" — 열람만 가능" if view_only() else " — 수정·추가 가능"}</span></div>', unsafe_allow_html=True)
-        with st.form("my_pw", clear_on_submit=True, border=False):
-            op = st.text_input("현재 비밀번호", type="password")
-            np_ = st.text_input("새 비밀번호", type="password")
-            if st.form_submit_button("비밀번호 변경"):
-                ok, msg = auth.set_password(_u["login_id"], np_, old_pw=op)
-                (st.success if ok else st.error)(msg)
-        if st.button("로그아웃", key="logout", width="stretch"):
+        if _u.get("guest"):
+            st.caption("수정하려면 계정으로 로그인하세요. 문의: LHC0104@YONSEI.AC.KR")
+        else:
+            with st.form("my_pw", clear_on_submit=True, border=False):
+                op = st.text_input("현재 비밀번호", type="password")
+                np_ = st.text_input("새 비밀번호", type="password")
+                if st.form_submit_button("비밀번호 변경"):
+                    ok, msg = auth.set_password(_u["login_id"], np_, old_pw=op)
+                    (st.success if ok else st.error)(msg)
+        if st.button("로그인 화면으로" if _u.get("guest") else "로그아웃", key="logout", width="stretch"):
             for k in ("auth", "page"):
                 st.session_state.pop(k, None)
             st.rerun()

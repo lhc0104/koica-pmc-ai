@@ -56,6 +56,11 @@ def ensure_admin() -> bool:
     return True
 
 
+def guest() -> dict:
+    """비로그인 접속 — 열람 전용(일반 권한). 계정 표에는 남기지 않는다"""
+    return {"login_id": "guest", "name": "비로그인 열람", "role": VIEWER, "guest": True}
+
+
 def verify(login_id: str, pw: str) -> dict | None:
     """맞으면 계정 dict(비밀번호 해시 제외), 아니면 None. 마지막 로그인 시각을 적는다"""
     login_id = (login_id or "").strip()
