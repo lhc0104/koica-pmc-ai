@@ -82,6 +82,7 @@ def get_entry(monday: date, role: str) -> dict | None:
 
 def save_entry(monday: date, role: str, author: str, position: str, content: str) -> str:
     """저장(같은 주·구분이 있으면 덮어씀). 내용이 비면 삭제. 반환: 안내문"""
+    storage.check_edit()
     author, position, content = (author or "").strip(), (position or "").strip(), (content or "").strip()
     ws = monday.isoformat()
     with connect() as con:
@@ -100,6 +101,7 @@ def save_entry(monday: date, role: str, author: str, position: str, content: str
 
 
 def delete_entry(monday: date, role: str) -> str:
+    storage.check_edit()
     return save_entry(monday, role, "", "", "")
 
 

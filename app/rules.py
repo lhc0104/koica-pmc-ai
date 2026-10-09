@@ -23,7 +23,7 @@ def deadline_alerts(today: date | None = None) -> list[dict]:
                    "WHERE status NOT IN ('제출','승인')"),
         "관리문서": ("SELECT mdoc_id AS ref, name, next_due AS due_date, owner, status FROM management_docs "
                   "WHERE status NOT IN ('제출','완료')"),
-        "마일스톤": ("SELECT milestone_id AS ref, title AS name, due_date, owner, status FROM milestones "
+        "마일스톤": ("SELECT milestone_id AS ref, title AS name, due_date, owner, status, priority FROM milestones "
                   "WHERE status<>'완료'"),
     }
     out = []
@@ -34,6 +34,7 @@ def deadline_alerts(today: date | None = None) -> list[dict]:
                 if left is not None and left <= horizon:
                     out.append({"구분": kind, "ref": r["ref"], "항목": r["name"], "기한": r["due_date"],
                                 "D-day": left, "담당": r["owner"], "상태": r["status"],
+                                "중요도": (r["priority"] if "priority" in r.keys() else "") or "",
                                 "경보": "기한경과" if left < 0 else f"D-{left}"})
     return sorted(out, key=lambda x: x["D-day"])
 

@@ -61,6 +61,7 @@ def due_from_rule(rule: str, contract: date | None, today: date | None = None) -
 def recalc(contract: date, today: date | None = None) -> dict:
     """due_rule이 있는 미완료 행의 기한을 다시 계산해 DB와 CSV에 반영. 반환: {표: 바뀐 행 수}"""
     from . import storage
+    storage.check_edit()
     from .db import connect
     spec = {"sub_outputs": ("sub_output_id", "due_date", ("제출", "승인")),
             "management_docs": ("mdoc_id", "next_due", ("완료",)),

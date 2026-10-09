@@ -44,6 +44,7 @@ def _polish_with_llm(items: list[dict]) -> list[dict]:
 
 def generate(use_llm: bool = False) -> int:
     """새 질문을 생성해 저장하고 신규 건수를 반환 (같은 트리거·대상은 중복 생성하지 않음)"""
+    storage.check_edit()
     with connect() as con:
         seen = {(r[0], r[1]) for r in con.execute("SELECT trigger_type, target_ref FROM ai_questions")}
     items = [i for i in _draft() if (i["trigger_type"], i["target_ref"]) not in seen]
@@ -60,6 +61,7 @@ def generate(use_llm: bool = False) -> int:
 
 
 def answer(qid: int, text: str) -> None:
+    storage.check_edit()
     with connect() as con:
         con.execute("UPDATE ai_questions SET answer=?, answered_at=CURRENT_TIMESTAMP, status='답변완료' WHERE id=?", (text, qid))
     storage.export_table("ai_questions")

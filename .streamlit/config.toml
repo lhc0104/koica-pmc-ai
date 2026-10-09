@@ -1,10 +1,16 @@
 [theme]
 base = "light"
 baseFontSize = 18
+font = "Pretendard Variable, Pretendard, Malgun Gothic, Apple SD Gothic Neo, sans-serif"
 primaryColor = "#1F4E9C"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F3F6FB"
+secondaryBackgroundColor = "#F7F9FC"
 textColor = "#1B2430"
+baseRadius = "10px"
+buttonRadius = "10px"
+
+[client]
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

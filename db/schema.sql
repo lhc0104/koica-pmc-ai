@@ -4,6 +4,17 @@
 PRAGMA foreign_keys = ON;
 
 -- ───────── 공통 ─────────
+CREATE TABLE IF NOT EXISTS accounts (          -- 로그인 계정 (v0.8) — 비밀번호는 PBKDF2 해시만 저장
+  login_id   TEXT PRIMARY KEY,
+  name       TEXT,
+  role       TEXT NOT NULL CHECK(role IN ('관리자','일반')),
+  salt       TEXT NOT NULL,
+  pw_hash    TEXT NOT NULL,
+  created_at TEXT,
+  last_login TEXT,
+  note       TEXT
+);
+
 CREATE TABLE IF NOT EXISTS users (
   user_id      TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
@@ -45,7 +56,21 @@ CREATE TABLE IF NOT EXISTS milestones (
   status         TEXT DEFAULT '예정' CHECK(status IN ('예정','진행중','완료','지연')),
   related_output TEXT,
   note           TEXT,
-  due_rule       TEXT
+  due_rule       TEXT,
+  priority       TEXT DEFAULT '일반'                -- 중요도: 필수 / 핵심 / 일반 (v0.7)
+);
+
+CREATE TABLE IF NOT EXISTS events (            -- 3. 사업일정 › 사업일정(달력) — 회의·출장·행사 등 (v0.7)
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,                    -- 일정
+  start_date   TEXT NOT NULL,                    -- 일시 (YYYY-MM-DD)
+  start_time   TEXT,                             -- HH:MM (종일이면 비움)
+  end_date     TEXT,                             -- 여러 날 일정이면 마지막 날
+  end_time     TEXT,
+  location     TEXT,                             -- 장소
+  participants TEXT,                             -- 참석자
+  note         TEXT,
+  created_at   TEXT DEFAULT (datetime('now','localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS stakeholders (
@@ -54,11 +79,14 @@ CREATE TABLE IF NOT EXISTS stakeholders (
   dept           TEXT,
   person_name    TEXT,
   position       TEXT,
-  contact        TEXT,                           -- 업무 목적 범위 최소 수집
+  phone          TEXT,                           -- 휴대전화 (v0.7: contact → phone/email, 업무 목적 범위 최소 수집)
+  email          TEXT,
   category       TEXT,                           -- KOICA/DOH/CHD/모병원/수행기관/공여기관
   valid_from     TEXT,
-  valid_to       TEXT                            -- 담당자 변경 이력
-);
+  valid_to       TEXT,                           -- 담당자 변경 이력
+  note           TEXT,                           -- 비고 (자유 메모)
+  photo_path     TEXT                            -- 사진 파일 (pmc/4_사업관리/이해관계자_사진/)
+);                                               -- 화면의 [열 추가]로 사용자 열이 더 붙을 수 있다
 
 CREATE TABLE IF NOT EXISTS meetings (         -- 회의록 (v0.5: 대·중·소분류 + 안건·결과·후속조치)
   meeting_id      TEXT PRIMARY KEY,              -- MT-001 …

@@ -28,7 +28,7 @@ python -m venv .venv
 if errorlevel 1 goto :fail
 
 :deps
-"%PY%" -c "import streamlit, anthropic, pandas, yaml, dotenv, pypdf, docx, reportlab, openpyxl" >nul 2>nul
+"%PY%" -c "import streamlit, anthropic, pandas, yaml, dotenv, pypdf, docx, reportlab, openpyxl, PIL, googleapiclient, google_auth_oauthlib" >nul 2>nul
 if not errorlevel 1 goto :db
 echo [2/3] Installing packages. This takes a few minutes the first time...
 "%PY%" -m pip install -r requirements.txt

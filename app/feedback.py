@@ -1,4 +1,4 @@
-"""[문제보고] 메모 — 본 DB의 issue_reports 테이블 + pmc/7_문제보고/문제보고.csv"""
+"""[문제보고] 메모 — 본 DB의 issue_reports 테이블 + pmc/8_문제보고/문제보고.csv"""
 from . import storage
 from .db import connect
 

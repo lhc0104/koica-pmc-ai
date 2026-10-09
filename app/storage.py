@@ -1,6 +1,6 @@
 """목차별 데이터 저장소 — pmc/ 폴더가 '원본', SQLite는 검색·집계용 '캐시'.
 
-  pmc/0_공통 · 1_대쉬보드 · 2_사업개요 · 3_사업일정 · 4_사업관리 · 5_성과관리 · 6_AI사업비서 · 7_문제보고
+  pmc/0_공통 · 1_대쉬보드 · 2_사업개요 · 3_사업일정 · 4_사업관리 · 5_성과관리 · 6_문서관리 · 7_AI사업비서 · 8_문제보고
 
 · 화면에서 저장 → DB 반영 + 해당 목차 폴더의 CSV 갱신
 · 폴더의 CSV를 엑셀로 고치거나 클라우드 동기화로 파일이 바뀜 → 다음 화면 갱신 때 자동으로 DB에 반영
@@ -15,16 +15,21 @@ from pathlib import Path
 import pandas as pd
 from .db import ROOT, connect, data_dir, schema_text
 
-FOLDERS = ["0_공통", "1_대쉬보드", "2_사업개요", "3_사업일정", "4_사업관리", "5_성과관리", "6_AI사업비서", "7_문제보고"]
+FOLDERS = ["0_공통", "1_대쉬보드", "2_사업개요", "3_사업일정", "4_사업관리", "5_성과관리", "6_문서관리", "7_AI사업비서", "8_문제보고"]
+RENAMED_FOLDERS = [("6_AI사업비서", "7_AI사업비서"), ("7_문제보고", "8_문제보고")]      # v0.7: 6번에 문서관리가 들어오며 번호가 밀림
+DOCS_SUBFOLDERS = ["01_계약·행정", "02_보고서(착수·분기·연차·완료)", "03_공문·서신", "04_회의·협의자료", "05_성과관리(PDM·조사·평가)",
+                   "06_조달·기자재", "07_교육·연수", "08_사진·현장자료", "99_기타"]
 
 # 테이블 → (목차 폴더, 파일명, 화면 표시명)
 TABLES = {
     "users":            ("0_공통",      "사용자.csv",         "사용자"),
+    "accounts":         ("0_공통",      "계정.csv",           "로그인 계정 (비밀번호는 해시)"),
     "outputs":          ("2_사업개요",  "사업산출물.csv",     "사업산출물 (6개)"),
     "centers":          ("2_사업개요",  "대상센터.csv",       "대상 센터"),
     "experts":          ("2_사업개요",  "전문가투입계획.csv", "전문가 투입계획(M/D)"),
     "activities":       ("3_사업일정",  "활동일정.csv",       "활동별 일정(분기) — 전체 일정표의 원천"),
     "milestones":       ("3_사업일정",  "마일스톤.csv",       "마일스톤"),
+    "events":           ("3_사업일정",  "사업일정.csv",       "사업일정(달력) — 회의·출장·행사"),
     "meetings":         ("4_사업관리",  "회의록.csv",         "회의록"),
     "action_items":     ("4_사업관리",  "후속조치.csv",       "회의 후속조치"),
     "stakeholders":     ("4_사업관리",  "이해관계자.csv",     "이해관계자"),
@@ -41,12 +46,30 @@ TABLES = {
     "pdm_versions":     ("5_성과관리",  "PDM버전.csv",        "PDM 버전 이력"),
     "pdm_evidence":     ("5_성과관리",  "PDM근거자료.csv",    "PDM 버전 근거자료"),
     "pms_meta":         ("5_성과관리",  "성과점검표_기본정보.csv", "성과점검표 기본정보(사업명·작성일)"),
-    "chat_log":         ("6_AI사업비서", "질의응답기록.csv",  "질의응답 기록"),
-    "ai_questions":     ("6_AI사업비서", "AI점검질문.csv",    "AI 점검 질문"),
-    "issue_reports":    ("7_문제보고",  "문제보고.csv",       "문제보고 메모"),
+    "chat_log":         ("7_AI사업비서", "질의응답기록.csv",  "질의응답 기록"),
+    "ai_questions":     ("7_AI사업비서", "AI점검질문.csv",    "AI 점검 질문"),
+    "issue_reports":    ("8_문제보고",  "문제보고.csv",       "문제보고 메모"),
 }
-DATE_COLS = {"due_date", "next_due", "meeting_date", "week_start", "valid_from", "valid_to", "doc_date", "submitted_at"}
+DATE_COLS = {"due_date", "next_due", "meeting_date", "week_start", "valid_from", "valid_to", "doc_date", "submitted_at", "start_date", "end_date"}
+PRIORITIES = ["필수", "핵심", "일반"]            # 마일스톤 중요도 (v0.7)
 STATE = ROOT / "data" / ".sync_state.json"
+
+# ───────── 수정 권한 (v0.8) ─────────
+permission_check = None          # ui 가 세션별 판정 함수(관리자면 True)를 꽂는다. 없으면(스크립트 실행) 모두 허용
+
+
+class NoEditPermission(PermissionError):
+    pass
+
+
+def can_edit() -> bool:
+    return permission_check is None or bool(permission_check())
+
+
+def check_edit() -> None:
+    """저장·수정·삭제 함수 맨 앞에서 부른다. 열람 권한이면 NoEditPermission"""
+    if not can_edit():
+        raise NoEditPermission("열람 권한만 있어 저장·수정할 수 없습니다. 관리자에게 문의하세요.")
 
 # 회의록 분류 (v0.5) — 대분류: activity(과업 Activity 이름) / 중분류: meeting_type / 소분류: stakeholder_org(이해관계기관)
 MEETING_TYPES = ["내부회의", "외부회의"]
@@ -82,10 +105,19 @@ def minutes_dir() -> Path:
 DOC_EXTS = {".md", ".txt", ".hwpx", ".docx", ".pdf"}
 
 
+def docs_mgmt_dir() -> Path:
+    """6_문서관리 — 사업 문서함 (v0.7). 처음 만들 때 기본 분류 폴더를 넣어 둔다"""
+    p = folder("6_문서관리")
+    if not any(p.iterdir()):                          # 완전히 비어 있을 때만 (사용자가 지운 폴더를 되살리지 않는다)
+        for s in DOCS_SUBFOLDERS:
+            (p / s).mkdir(exist_ok=True)
+    return p
+
+
 def doc_roots() -> list[Path]:
-    """검색 색인 대상 폴더: 4_사업관리/문서 + 5_성과관리/PDM근거 + pmc 바로 아래 '99'로 시작하는 참고자료 폴더(예: '99. pre')"""
+    """검색 색인 대상 폴더: 4_사업관리/문서 + 5_성과관리/PDM근거 + 6_문서관리 + pmc 바로 아래 '99'로 시작하는 참고자료 폴더(예: '99. pre')"""
     ev = data_dir() / "5_성과관리" / "PDM근거"
-    return [docs_dir()] + ([ev] if ev.is_dir() else []) + sorted(p for p in data_dir().glob("99*") if p.is_dir())
+    return [docs_dir()] + ([ev] if ev.is_dir() else []) + [docs_mgmt_dir()] + sorted(p for p in data_dir().glob("99*") if p.is_dir())
 
 
 def doc_files() -> list[Path]:
@@ -231,16 +263,34 @@ def import_table(table: str, path: Path | None = None) -> int:
     df = _read_csv(path or csv_path(table))
     if table == "meetings":
         df = _normalize_meetings(df)
+    if table == "stakeholders":
+        if "contact" in df.columns:                      # v0.6 이전 파일
+            c = df["contact"].fillna("").astype(str).str.strip()
+            if "email" not in df.columns:
+                df["email"] = c.where(c.str.contains("@"), "")
+            if "phone" not in df.columns:
+                df["phone"] = c.where(~c.str.contains("@"), "")
+            df = df.drop(columns=["contact"])
+        have = {x.lower() for x in columns(table)}
+        with connect() as con:                           # 엑셀에서 열을 더한 경우 DB에도 같은 열을 만든다
+            for c in df.columns:
+                if c.lower() not in have and re.fullmatch(r"[A-Za-z가-힣_][A-Za-z0-9가-힣_]*", c):
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {_q(c)} TEXT")
+            con.commit()
     _write_rows(table, df)
     return len(df)
 
 
 # ───────── 화면에서 편집한 표 저장 ─────────
 def save_table(table: str, df: pd.DataFrame) -> tuple[bool, str]:
+    if not can_edit():
+        return False, "열람 권한만 있어 저장할 수 없습니다. 관리자에게 문의하세요."
     df = df.copy()
     df = df[~df.apply(lambda r: all(v is None or str(v).strip() in ("", "nan", "None") for v in r), axis=1)]
     if table == "meetings":
         df = _normalize_meetings(df)
+    if table == "milestones" and "priority" in df.columns:
+        df["priority"] = df["priority"].fillna("").astype(str).str.strip().replace("", "일반")
     with connect(readonly=True) as con:
         info = _cols(con, table)
     for c in info:
@@ -282,9 +332,10 @@ def sync_docs(force: bool = False) -> int | None:
 
 
 NEW_COLS = {"outputs": ["outcome", "implementer", "deliverable"], "sub_outputs": ["due_rule"], "management_docs": ["due_rule", "contents"],
-            "pdm_indicators": ["target_basis", "collector", "origin", "remark"], "milestones": ["due_rule"],
+            "pdm_indicators": ["target_basis", "collector", "origin", "remark"], "milestones": ["due_rule", "priority TEXT DEFAULT '일반'"],
             "meetings": ["meeting_time", "activity", "stakeholder_org", "location", "agenda", "follow_up", "author", "file_path"],
-            "pdm_matrix": ["version INTEGER DEFAULT 1"]}      # 열 이름 뒤에 타입을 적으면 그대로 사용(없으면 TEXT)
+            "pdm_matrix": ["version INTEGER DEFAULT 1"],
+            "stakeholders": ["phone", "email", "note", "photo_path"]}      # 열 이름 뒤에 타입을 적으면 그대로 사용(없으면 TEXT)
 
 
 def _migrate(con) -> set[str]:
@@ -303,7 +354,74 @@ def _migrate(con) -> set[str]:
         con.execute("UPDATE meetings SET meeting_type = CASE WHEN meeting_type LIKE '%내부%' THEN '내부회의' ELSE '외부회의' END "
                     "WHERE IFNULL(meeting_type,'') NOT IN ('내부회의','외부회의')")
         con.commit()
+    if "milestones" in changed:
+        con.execute("UPDATE milestones SET priority='일반' WHERE IFNULL(priority,'')=''")
+        con.commit()
+    if "contact" in {c["name"] for c in _cols(con, "stakeholders")}:     # v0.7: 연락처 한 칸 → 휴대전화·이메일
+        con.execute("UPDATE stakeholders SET email = contact WHERE IFNULL(email,'')='' AND contact LIKE '%@%'")
+        con.execute("UPDATE stakeholders SET phone = contact WHERE IFNULL(phone,'')='' AND IFNULL(contact,'')<>'' AND contact NOT LIKE '%@%'")
+        con.commit()
+        try:
+            con.execute("ALTER TABLE stakeholders DROP COLUMN contact")
+            con.commit()
+        except sqlite3.OperationalError:               # 오래된 SQLite: 열은 남겨 두고 화면에서만 감춘다
+            pass
+        changed.add("stakeholders")
     return changed
+
+
+# ───────── 열 추가·삭제 (v0.7: 이해관계자처럼 사용자가 항목을 늘릴 수 있는 표) ─────────
+def columns(table: str) -> list[str]:
+    with connect(readonly=True) as con:
+        return [c["name"] for c in _cols(con, table)]
+
+
+def _q(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def add_column(table: str, name: str) -> tuple[bool, str]:
+    check_edit()
+    name = (name or "").strip()
+    if not re.fullmatch(r"[A-Za-z가-힣_][A-Za-z0-9가-힣_ ]*", name):
+        return False, "열 이름은 한글·영문·숫자·밑줄만 쓸 수 있고 숫자로 시작할 수 없습니다."
+    name = re.sub(r"\s+", "_", name)
+    if name.lower() in {c.lower() for c in columns(table)}:
+        return False, f"'{name}' 열이 이미 있습니다."
+    try:
+        with connect() as con:
+            con.execute(f"SELECT 1 AS {name}")            # 예약어인지 확인 (order, group 등)
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {_q(name)} TEXT")
+            con.commit()
+    except sqlite3.OperationalError as e:
+        return False, f"열을 추가하지 못했습니다: {e}"
+    export_table(table)
+    return True, f"'{name}' 열을 추가했습니다."
+
+
+def drop_column(table: str, name: str) -> tuple[bool, str]:
+    check_edit()
+    if name not in columns(table):
+        return False, f"'{name}' 열이 없습니다."
+    try:
+        with connect() as con:
+            con.execute(f"ALTER TABLE {table} DROP COLUMN {_q(name)}")
+            con.commit()
+    except sqlite3.OperationalError as e:
+        return False, f"열을 지우지 못했습니다 (SQLite 3.35 이상 필요): {e}"
+    export_table(table)
+    return True, f"'{name}' 열을 지웠습니다."
+
+
+def update_cell(table: str, key_col: str, key: str, col: str, value) -> tuple[bool, str]:
+    """한 칸만 고치기 (비고·사진 경로처럼 표 편집 밖에서 바꾸는 값)"""
+    check_edit()
+    with connect() as con:
+        con.execute(f"UPDATE {table} SET {_q(col)} = ? WHERE {_q(key_col)} = ?", (value, key))
+        con.commit()
+    if not export_table(table):
+        return True, f"DB에는 저장했지만 {TABLES[table][1]} 파일이 엑셀에서 열려 있어 파일은 갱신하지 못했습니다."
+    return True, "저장했습니다."
 
 
 # ───────── 회의록 추가 (v0.5) ─────────
@@ -340,6 +458,7 @@ def _safe_name(s: str, n: int = 60) -> str:
 
 def add_meeting(rec: dict, attachment: tuple[str, bytes] | None = None, add_org: bool = True) -> tuple[str, str]:
     """회의록 1건 저장: DB + pmc/4_사업관리/회의록.csv, 후속조치 등록, 첨부·검색용 회의록 파일 저장. 반환: (meeting_id, 안내문)"""
+    check_edit()
     from .minutes_doc import to_markdown
     mid = str(rec.get("meeting_id") or "").strip() or next_meeting_id()
     rec = {c: str(rec.get(c) or "").strip() for c in MEETING_COLS}
@@ -388,8 +507,17 @@ def meeting_actions(mid: str) -> list[dict]:
 def bootstrap(from_seed: bool = False) -> list[str]:
     """폴더·스키마 준비, 예전 버전 데이터 이전, 파일↔DB 맞추기. 반환: 사용자에게 알릴 메시지"""
     msgs = []
+    for old, new in RENAMED_FOLDERS:                      # v0.7 폴더 번호 변경 (예전 폴더가 있고 새 폴더가 없을 때만)
+        o, n = data_dir() / old, data_dir() / new
+        if o.is_dir() and not n.exists():
+            try:
+                o.rename(n)
+                msgs.append(f"pmc/{old} 폴더를 pmc/{new} 로 옮겼습니다 (메뉴 번호 변경).")
+            except OSError as e:
+                msgs.append(f"⚠️ pmc/{old} → {new} 이름을 바꾸지 못했습니다 (폴더가 열려 있나요?): {e}")
     for f in FOLDERS:
         folder(f)
+    docs_mgmt_dir()
     with connect() as con:
         first_pms = not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pms_meta'").fetchone()   # v0.5 성과점검표 양식 첫 적용?
         had_ind = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pdm_indicators'").fetchone()
@@ -457,6 +585,7 @@ def bootstrap(from_seed: bool = False) -> list[str]:
 
 # ───────── 1. 대쉬보드 점검 결과 스냅샷 ─────────
 def save_alert_snapshot(alerts: dict, today: date | None = None) -> Path | None:
+    check_edit()
     today = today or date.today()
     rows = []
     for r in alerts["기한"]:
@@ -476,7 +605,7 @@ def save_alert_snapshot(alerts: dict, today: date | None = None) -> Path | None:
 
 
 def save_conversation(view: list[tuple[str, str]]) -> Path:
-    d = folder("6_AI사업비서") / "대화기록"
+    d = folder("7_AI사업비서") / "대화기록"
     d.mkdir(exist_ok=True)
     p = d / f"대화_{datetime.now():%Y%m%d_%H%M%S}.md"
     who = {"user": "질문", "assistant": "AI 사업비서"}
@@ -502,6 +631,7 @@ def indicator_sheet() -> pd.DataFrame:
 
 def save_indicator_sheet(df: pd.DataFrame) -> tuple[bool, str]:
     """편집한 표를 pdm_indicators + indicator_targets 로 나누어 저장"""
+    check_edit()
     df = df.copy()
     ycols = [f"y{y}" for y in YEARS if f"y{y}" in df.columns]
     ok, msg = save_table("pdm_indicators", df.drop(columns=ycols))
@@ -577,6 +707,7 @@ def _pdm_write_doc(version: int) -> None:
 
 def pdm_add_version(author: str = "", reason: str = "") -> int:
     """마지막 버전의 행을 모두 복사해 새 버전을 만든다. 반환: 새 버전 번호"""
+    check_edit()
     vers = pdm_versions()
     last = vers[-1]["version"] if vers else 1
     new = int(last) + 1
@@ -596,6 +727,7 @@ def pdm_add_version(author: str = "", reason: str = "") -> int:
 
 def pdm_save_version(version: int, df: pd.DataFrame, meta: dict | None = None) -> tuple[bool, str]:
     """선택한 버전의 행만 바꿔 저장(다른 버전은 그대로). meta 로 버전 정보(사유·상태·작성자·승인일)도 함께 갱신"""
+    check_edit()
     df = df.copy()
     df["version"] = int(version)
     with connect(readonly=True) as con:
@@ -618,6 +750,7 @@ def pdm_save_version(version: int, df: pd.DataFrame, meta: dict | None = None) -
 
 def pdm_delete_version(version: int) -> tuple[bool, str]:
     """마지막 버전(v1 제외)만 지울 수 있다. 근거 파일은 폴더에 남긴다."""
+    check_edit()
     vers = pdm_versions()
     if int(version) == 1 or int(version) != vers[-1]["version"]:
         return False, "v1과 중간 버전은 지울 수 없습니다(마지막 버전만 삭제 가능)."
@@ -633,6 +766,7 @@ def pdm_delete_version(version: int) -> tuple[bool, str]:
 
 
 def pdm_add_evidence(version: int, files: list[tuple[str, bytes]], note: str = "") -> int:
+    check_edit()
     d = pdm_evidence_dir(version)
     n = 0
     with connect() as con:
@@ -658,6 +792,7 @@ def pdm_evidence(version: int) -> list[dict]:
 
 
 def pdm_delete_evidence(eid: int) -> None:
+    check_edit()
     with connect() as con:
         r = con.execute("SELECT file_path FROM pdm_evidence WHERE id=?", (int(eid),)).fetchone()
         con.execute("DELETE FROM pdm_evidence WHERE id=?", (int(eid),))
@@ -678,6 +813,7 @@ def pms_meta() -> dict:
 
 
 def save_pms_meta(d: dict) -> None:
+    check_edit()
     with connect() as con:
         con.executemany("INSERT INTO pms_meta(key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                         [(k, (v or "").strip()) for k, v in d.items()])
@@ -711,6 +847,7 @@ def indicator_years_long() -> pd.DataFrame:
 
 def save_indicator_years(df: pd.DataFrame) -> tuple[bool, str]:
     """긴 형식 편집표 → indicator_targets(비고 유지) + indicator_values(검증자·근거문서 유지)"""
+    check_edit()
     def _num(v, iid, y):
         if v is None or (isinstance(v, float) and pd.isna(v)):
             return None
@@ -747,3 +884,50 @@ def save_indicator_years(df: pd.DataFrame) -> tuple[bool, str]:
         con.commit()
     ok = export_table("indicator_targets") and export_table("indicator_values")
     return True, f"연간 목표치 {len(t_rows)}칸 · 연간 실적치 {len(v_rows)}칸 저장" + ("" if ok else " (CSV 파일이 엑셀에서 열려 있어 파일 갱신은 다음 저장 때)")
+
+
+# ───────── 3. 사업일정 › 사업일정(달력) (v0.7) ─────────
+def events_between(d0: str, d1: str) -> list[dict]:
+    """d0 ≤ 날짜 ≤ d1 에 걸치는 일정 (여러 날 일정은 end_date 로 판단)"""
+    with connect(readonly=True) as con:
+        rows = con.execute("SELECT * FROM events WHERE start_date <= ? AND IFNULL(NULLIF(end_date,''), start_date) >= ? "
+                           "ORDER BY start_date, IFNULL(start_time,''), id", (d1, d0)).fetchall()
+    return [{k: ("" if r[k] is None else r[k]) for k in r.keys()} for r in rows]
+
+
+def add_event(rec: dict) -> tuple[bool, str]:
+    check_edit()
+    title = str(rec.get("title") or "").strip()
+    if not title:
+        return False, "일정 이름을 적어 주세요."
+    d = _norm_date(str(rec.get("start_date") or ""))
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+        return False, "날짜를 확인해 주세요."
+    e = _norm_date(str(rec.get("end_date") or "")) or ""
+    if e and e < d:
+        e = d
+    with connect() as con:
+        con.execute("INSERT INTO events(title,start_date,start_time,end_date,end_time,location,participants,note) VALUES (?,?,?,?,?,?,?,?)",
+                    (title, d, str(rec.get("start_time") or "").strip(), e, str(rec.get("end_time") or "").strip(),
+                     str(rec.get("location") or "").strip(), str(rec.get("participants") or "").strip(), str(rec.get("note") or "").strip()))
+        con.commit()
+    export_table("events")
+    return True, f"'{title}' 일정을 {d}에 추가했습니다."
+
+
+def delete_event(eid: int) -> tuple[bool, str]:
+    check_edit()
+    with connect() as con:
+        r = con.execute("SELECT title FROM events WHERE id=?", (eid,)).fetchone()
+        con.execute("DELETE FROM events WHERE id=?", (eid,))
+        con.commit()
+    export_table("events")
+    return True, f"'{r[0] if r else eid}' 일정을 지웠습니다."
+
+
+def next_milestone_id(existing: list[str] | None = None) -> str:
+    if existing is None:
+        with connect(readonly=True) as con:
+            existing = [r[0] for r in con.execute("SELECT milestone_id FROM milestones")]
+    nums = [int(m.group(1)) for i in existing for m in [re.search(r"(\d+)\s*$", str(i))] if m]
+    return f"MS-{(max(nums) + 1 if nums else 1):03d}"
