@@ -27,14 +27,11 @@ def _draft() -> list[dict]:
 
 
 def _polish_with_llm(items: list[dict]) -> list[dict]:
-    import anthropic
-    cfg = settings()["llm"]
+    from . import agent
     prompt = ("아래는 ODA PMC 사업의 자동 점검에서 만들어진 담당자용 질문 초안이다. 각 질문을 담당자가 한 번에 답할 수 있게 "
               "정중하고 구체적인 한국어 1~2문장으로 다듬어라. 사실(수치·날짜·명칭)은 바꾸지 말 것. "
               "입력과 같은 순서의 JSON 문자열 배열만 출력하라.\n\n" + json.dumps([i["question"] for i in items], ensure_ascii=False))
-    resp = anthropic.Anthropic().messages.create(model=cfg["model"], max_tokens=cfg["max_tokens"],
-                                                 messages=[{"role": "user", "content": prompt}])
-    text = "".join(b.text for b in resp.content if b.type == "text").replace("```json", "").replace("```", "").strip()
+    text = agent.simple(prompt).replace("```json", "").replace("```", "").strip()
     polished = json.loads(text)
     if len(polished) == len(items):
         for i, q in zip(items, polished):

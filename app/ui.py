@@ -324,7 +324,7 @@ def view_only() -> bool:
 
 
 EDIT_WORDS = re.compile(r"저장|추가|삭제|지우기|지우기|수정|바꾸기|만들기|반영|올리기|업로드|생성|계산|등록|연결|끊기|가져오기|보내기|입력|옮기기|답변|재설정|적용")
-ALLOW_LABELS = {"메모 저장", "비밀번호 변경", "로그인", "로그아웃", "로그인 화면으로", "비로그인 접속 (열람용)"}
+ALLOW_LABELS = {"메모 저장", "비밀번호 변경", "로그인", "로그아웃", "로그인 화면으로", "비로그인 접속 (열람용)", "이 대화 저장"}
 VIEW_HELP = "열람 권한만 있습니다. 수정하려면 관리자에게 문의하세요."
 
 
@@ -2212,8 +2212,11 @@ if page == MENUS[0]:
     today = date.today()
     a = rules.all_alerts()
     snap = storage.folder("1_대쉬보드") / f"점검결과_{today.isoformat()}.csv"
-    if not snap.exists():                  # 하루 한 번 자동 저장 → 7년간 점검 이력이 쌓인다
-        storage.save_alert_snapshot(a)
+    if not snap.exists() and storage.can_edit():      # 하루 한 번 자동 저장(관리자가 열 때) → 7년간 점검 이력이 쌓인다. 열람 계정은 보기만
+        try:
+            storage.save_alert_snapshot(a)
+        except Exception:
+            pass
 
     st.title("대쉬보드")
     st.markdown(f'<div class="dash-sub">{esc(dash_date_line(today))}</div>', unsafe_allow_html=True)
@@ -2481,8 +2484,38 @@ elif page == MENUS[6]:
     st.title("7. AI 사업비서")
     chat_tab, q_tab = st.tabs(["묻고 답하기", "AI 점검 질문"])
     with chat_tab:
-        if not agent.has_key():
-            st.warning(".env 파일에 ANTHROPIC_API_KEY를 설정하면 사용할 수 있습니다.")
+        _s = agent.status()
+        s1, s2 = st.columns([3.6, 1.3], vertical_alignment="center")
+        s1.markdown(f'<div class="mt-c">{badge("연결됨" if _s["has_key"] else "키 없음", "green" if _s["has_key"] else "red")}'
+                    f'<b>{esc(_s["provider_label"])}</b> · 모델 {esc(_s["model"])}'
+                    + (f' · 키 {esc(_s["masked_key"])}' if _s["has_key"] else " · 관리자가 [AI 연결 설정]에서 API 키를 넣어야 합니다") + "</div>", unsafe_allow_html=True)
+        if is_admin():
+            with s2.popover("AI 연결 설정", width="stretch"):
+                st.markdown('<div class="card-title" style="font-size:1.05rem">AI 연결 설정</div>'
+                            '<div class="card-meta">PC에서는 아래 [저장]이 프로젝트의 <code>.env</code> 에 적습니다. Streamlit Cloud 에서는 앱 설정 › Secrets 에 '
+                            '같은 이름(ANTHROPIC_API_KEY 등)으로 넣어야 유지됩니다.</div>', unsafe_allow_html=True)
+                prov = st.radio("공급자", list(agent.PROVIDERS), format_func=lambda x: agent.PROVIDERS[x], index=list(agent.PROVIDERS).index(_s["provider"]),
+                                horizontal=True, key="ai_prov")
+                choices = agent.MODEL_CHOICES[prov]
+                cur_model = _s["model"] if prov == _s["provider"] else agent.DEFAULT_MODELS[prov]
+                mdl = st.selectbox("모델", choices + ["직접 입력"], index=choices.index(cur_model) if cur_model in choices else len(choices), key="ai_model_sel")
+                if mdl == "직접 입력":
+                    mdl = st.text_input("모델 이름", value=cur_model if cur_model not in choices else "", key="ai_model_txt")
+                key_in = st.text_input(f"API 키 ({agent.KEY_NAMES[prov]})", type="password", key="ai_key", placeholder="비워 두면 지금 키를 유지합니다")
+                if not agent._sdk_available(prov):
+                    st.warning(f"{agent.PROVIDERS[prov]} 패키지가 아직 설치되지 않았습니다. AI_ME_v1.bat 을 다시 실행하면 설치됩니다.")
+                b1, b2 = st.columns(2)
+                if b1.button("저장", type="primary", key="ai_save", width="stretch"):
+                    vals = {"AIKME_LLM_PROVIDER": prov, "AIKME_LLM_MODEL": (mdl or "").strip()}
+                    if key_in.strip():
+                        vals[agent.KEY_NAMES[prov]] = key_in.strip()
+                    ok, msg = agent.save_env(vals)
+                    st.session_state["flash"] = (ok, msg); st.rerun()
+                if b2.button("연결 테스트", key="ai_test", width="stretch"):
+                    with st.spinner("API 에 짧은 질문을 보내는 중…"):
+                        ok, msg = agent.test_connection()
+                    (st.success if ok else st.error)(msg)
+        show_flash()
         st.session_state.setdefault("view", [])
         st.session_state.setdefault("history", [])
         bank = yaml.safe_load((ROOT / "prompts" / "question_bank.yaml").read_text(encoding="utf-8"))

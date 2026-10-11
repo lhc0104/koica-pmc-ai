@@ -14,8 +14,10 @@ def settings() -> dict:
 
 
 def db_path() -> Path:
-    """검색·집계용 SQLite(로컬 캐시). 원본 데이터는 data_dir()의 파일들이다."""
-    p = Path(settings()["project"]["db_path"])
+    """검색·집계용 SQLite(로컬 캐시). 원본 데이터는 data_dir()의 파일들이다.
+    프로젝트 폴더가 Google 드라이브처럼 동기화되는 곳에 있으면 .env 또는 실행 bat 의 PMC_DB_PATH 로 캐시를 PC 안(예: %LOCALAPPDATA%)에 두어
+    두 컴퓨터가 같은 DB 파일을 동시에 건드리지 않게 한다 (DB는 pmc/ CSV 에서 언제든 다시 만들어진다)."""
+    p = Path(os.getenv("PMC_DB_PATH") or settings()["project"]["db_path"])
     return p if p.is_absolute() else ROOT / p
 
 

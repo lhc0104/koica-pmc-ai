@@ -5,8 +5,9 @@ project:
   docs_dir: "data/documents"
 
 llm:
-  provider: "anthropic"
-  model: "claude-sonnet-5"      # 사용 시점의 최신 모델명으로 교체 (docs.claude.com 모델 목록 확인)
+  provider: "anthropic"         # anthropic(Claude) | openai(GPT) — .env/Secrets 의 AIKME_LLM_PROVIDER 가 있으면 그쪽이 우선
+  model: "claude-sonnet-5-5"    # Claude 모델 (AIKME_LLM_MODEL 로 덮어쓸 수 있음)
+  openai_model: "gpt-5"         # GPT 를 고를 때 쓰는 모델
   max_tokens: 2000
   max_tool_rounds: 6            # 한 질문당 도구 호출 반복 상한
 

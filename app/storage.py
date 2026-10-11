@@ -13,7 +13,7 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 import pandas as pd
-from .db import ROOT, connect, data_dir, schema_text
+from .db import ROOT, connect, data_dir, db_path, schema_text
 
 FOLDERS = ["0_공통", "1_대쉬보드", "2_사업개요", "3_사업일정", "4_사업관리", "5_성과관리", "6_문서관리", "7_AI사업비서", "8_문제보고"]
 RENAMED_FOLDERS = [("6_AI사업비서", "7_AI사업비서"), ("7_문제보고", "8_문제보고")]      # v0.7: 6번에 문서관리가 들어오며 번호가 밀림
@@ -52,7 +52,7 @@ TABLES = {
 }
 DATE_COLS = {"due_date", "next_due", "meeting_date", "week_start", "valid_from", "valid_to", "doc_date", "submitted_at", "start_date", "end_date"}
 PRIORITIES = ["필수", "핵심", "일반"]            # 마일스톤 중요도 (v0.7)
-STATE = ROOT / "data" / ".sync_state.json"
+STATE = db_path().parent / ".sync_state.json"      # CSV↔DB 동기화 기록은 DB 캐시 옆에(PC마다 따로)
 
 # ───────── 수정 권한 (v0.8) ─────────
 permission_check = None          # ui 가 세션별 판정 함수(관리자면 True)를 꽂는다. 없으면(스크립트 실행) 모두 허용
@@ -515,6 +515,14 @@ def bootstrap(from_seed: bool = False) -> list[str]:
                 msgs.append(f"pmc/{old} 폴더를 pmc/{new} 로 옮겼습니다 (메뉴 번호 변경).")
             except OSError as e:
                 msgs.append(f"⚠️ pmc/{old} → {new} 이름을 바꾸지 못했습니다 (폴더가 열려 있나요?): {e}")
+        elif o.is_dir() and n.is_dir():                   # 둘 다 있으면(드라이브 동기화·옛 프로세스가 되살린 경우) 내용 없는 쪽을 정리
+            files = [f for f in o.rglob("*") if f.is_file()]
+            empty = all(f.suffix.lower() == ".csv" and len(f.read_text(encoding="utf-8-sig", errors="ignore").strip().splitlines()) <= 1 for f in files)
+            if empty:
+                shutil.rmtree(o, ignore_errors=True)
+                msgs.append(f"비어 있는 옛 폴더 pmc/{old} 를 지웠습니다 (지금은 pmc/{new} 를 씁니다).")
+            else:
+                msgs.append(f"⚠️ pmc/{old} 와 pmc/{new} 가 둘 다 있습니다. 지금은 {new} 를 쓰니 {old} 안의 파일을 옮긴 뒤 {old} 폴더를 지워 주세요.")
     for f in FOLDERS:
         folder(f)
     docs_mgmt_dir()

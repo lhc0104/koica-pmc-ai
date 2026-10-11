@@ -8,7 +8,9 @@ if exist "app\ui.py" goto :found
 echo [ERROR] app\ui.py not found. Put this file next to AI_ME_v1.bat.
 goto :end
 :found
-set "PY=.venv\Scripts\python.exe"
+set "LOCAL=%LOCALAPPDATA%\AI-KME"
+set "PMC_DB_PATH=%LOCAL%\pmc.db"
+set "PY=%LOCAL%\venv\Scripts\python.exe"
 if not exist "%PY%" (
   echo [ERROR] Run AI_ME_v1 once first so that the environment is installed.
   goto :end
